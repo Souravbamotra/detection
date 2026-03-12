@@ -54,3 +54,12 @@ labels = [label.strip() for label in search_query.split(",")] + ["fruit", "round
     else:
 
         st.warning("No matches found. Try lowering the Sensitivity or changing the fruit name.")
+
+@st.cache_resource
+def load_zero_shot_detector():
+    # Use the non-ensemble version to save memory
+    return pipeline(
+        model="google/owlv2-base-patch16", 
+        task="zero-shot-object-detection", 
+        device=-1  # Forces CPU usage to avoid CUDA memory errors
+    )
