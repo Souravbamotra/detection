@@ -28,7 +28,8 @@ if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     
     # Process Search Query
-    labels = [label.strip() for label in search_query.split(",")]
+  # Add 'fruit' as a general category to help the AI distinguish specific types
+labels = [label.strip() for label in search_query.split(",")] + ["fruit", "round object"]
     
     with st.spinner(f"Searching for {labels}..."):
         # Run Inference
@@ -51,4 +52,5 @@ if uploaded_file:
     if predictions:
         st.success(f"Found {len(predictions)} items!")
     else:
+
         st.warning("No matches found. Try lowering the Sensitivity or changing the fruit name.")
