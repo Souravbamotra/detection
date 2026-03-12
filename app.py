@@ -1,65 +1,49 @@
 import streamlit as st
 from transformers import pipeline
 from PIL import Image, ImageDraw
-import torch
 
 # --- App Config ---
-st.set_page_config(page_title="Global Fruit Finder", page_icon="🌍")
-st.title("🌍 Zero-Shot Global Fruit Finder")
-st.write("Type *any* fruit name in the world, and the AI will find it.")
+st.set_page_config(page_title="Universal Object Finder", layout="wide")
 
-# --- Load Zero-Shot Model ---
 @st.cache_resource
-def load_zero_shot_detector():
-    # OWL-ViT v2 is excellent for detecting objects it has never 'officially' learned
-    return pipeline(model="google/owlv2-base-patch16-ensemble", task="zero-shot-object-detection")
+def load_owl():
+    # OWLv2 is designed for 'Open Vocabulary' (detecting everything)
+    return pipeline(model="google/owlv2-base-patch16", task="zero-shot-object-detection")
 
-detector = load_zero_shot_detector()
+detector = load_owl()
 
-# --- Sidebar Controls ---
-st.sidebar.header("Search Settings")
-search_query = st.sidebar.text_input("What fruit are we looking for?", "apple, orange, pomegranate")
-threshold = st.sidebar.slider("Sensitivity (Threshold)", 0.05, 1.0, 0.15)
+# --- Sidebar: Choose your World ---
+st.sidebar.title("🌍 Detection Universe")
+mode = st.sidebar.selectbox("What are we looking for?", 
+    ["Everything (Infinite)", "Fruits & Food", "Vehicles & Transport", "Tools & Hardware"])
 
-# --- Upload Image ---
-uploaded_file = st.file_uploader("Upload a photo of mystery fruits...", type=['jpg', 'png', 'webp'])
+# Define the 'Vocabulary' based on the mode
+vocab_map = {
+    "Everything (Infinite)": "object, thing, item", # Very broad
+    "Fruits & Food": "apple, banana, orange, pomegranate, bread, milk",
+    "Vehicles & Transport": "car, ship, airplane, bicycle, truck, boat",
+    "Tools & Hardware": "hammer, screwdriver, wrench, nail, drill, saw"
+}
+
+# Allow the user to edit the list manually too
+search_query = st.sidebar.text_area("Specific labels (comma separated):", value=vocab_map[mode])
+threshold = st.sidebar.slider("Sensitivity", 0.05, 1.0, 0.15)
+
+# --- Logic ---
+uploaded_file = st.file_uploader("Upload Image", type=['jpg', 'png', 'webp'])
 
 if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
+    img = Image.open(uploaded_file).convert("RGB")
+    labels = [l.strip() for l in search_query.split(",")]
     
-    # This line and the one below must have the same number of spaces/tabs
-    labels = [label.strip() for label in search_query.split(",")]
-    
-    with st.spinner(f"Searching for {labels}..."):
-        # This line is inside the 'with' block, so it is indented further
-        predictions = detector(image, candidate_labels=labels, threshold=threshold)
+    with st.spinner(f"Scanning for {labels}..."):
+        results = detector(img, candidate_labels=labels, threshold=threshold)
         
-        # Draw Results
-        draw = ImageDraw.Draw(image)
-        for prediction in predictions:
-            box = prediction["box"]
-            label = prediction["label"]
-            score = prediction["score"]
-            
-            # Draw Bounding Box
-            draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="red", width=3)
-            draw.text((box["xmin"], box["ymin"]), f"{label} ({round(score, 2)})", fill="white")
+        draw = ImageDraw.Draw(img)
+        for res in results:
+            box = res["box"]
+            label = res["label"]
+            draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="cyan", width=3)
+            draw.text((box["xmin"], box["ymin"] - 10), label, fill="cyan")
 
-    st.image(image, caption="AI Detection Results", use_container_width=True)
-    
-    # Display summary
-    if predictions:
-        st.success(f"Found {len(predictions)} items!")
-    else:
-
-        st.warning("No matches found. Try lowering the Sensitivity or changing the fruit name.")
-
-@st.cache_resource
-def load_zero_shot_detector():
-    # Use the non-ensemble version to save memory
-    return pipeline(
-        model="google/owlv2-base-patch16", 
-        task="zero-shot-object-detection", 
-        device=-1  # Forces CPU usage to avoid CUDA memory errors
-    )
-
+    st.image(img, use_container_width=True)
