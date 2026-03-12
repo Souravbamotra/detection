@@ -27,12 +27,11 @@ uploaded_file = st.file_uploader("Upload a photo of mystery fruits...", type=['j
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     
-    # Process Search Query
-  # Add 'fruit' as a general category to help the AI distinguish specific types
-labels = [label.strip() for label in search_query.split(",")] + ["fruit", "round object"]
+    # This line and the one below must have the same number of spaces/tabs
+    labels = [label.strip() for label in search_query.split(",")]
     
     with st.spinner(f"Searching for {labels}..."):
-        # Run Inference
+        # This line is inside the 'with' block, so it is indented further
         predictions = detector(image, candidate_labels=labels, threshold=threshold)
         
         # Draw Results
@@ -63,3 +62,4 @@ def load_zero_shot_detector():
         task="zero-shot-object-detection", 
         device=-1  # Forces CPU usage to avoid CUDA memory errors
     )
+
