@@ -1,104 +1,103 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer
+from streamlit_webrtc import webrtc_streamer, RTCConfiguration
 import av
 import cv2
 import numpy as np
 from transformers import pipeline
 from PIL import Image, ImageDraw
 
-# --- 1. Modern Glassmorphism Theme ---
+# --- 1. Futuristic Cyberpunk Theme ---
 st.set_page_config(page_title="VisionPro AI", page_icon="👁️", layout="wide")
 
-def apply_modern_style():
-    st.markdown("""
+st.markdown("""
     <style>
-    /* Main Background Gradient */
+    /* Gradient Background */
     .stApp {
-        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-        color: #ffffff;
+        background: linear-gradient(160deg, #060d16 0%, #101828 100%);
+        color: #e2e8f0;
     }
-    /* Glassmorphism Containers */
+    /* Cyberpunk Glass Panels */
     [data-testid="stVerticalBlock"] > div:has(div.element-container) {
-        background: rgba(255, 255, 255, 0.05);
-        backdrop-filter: blur(10px);
-        border-radius: 20px;
-        padding: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 20px;
+        background: rgba(16, 24, 40, 0.6);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(0, 255, 204, 0.2);
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
     }
-    /* Custom Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: rgba(0, 0, 0, 0.3) !important;
-        border-right: 1px solid rgba(0, 255, 204, 0.2);
-    }
-    /* Titles & Headers */
+    /* Neon Headlines */
     h1, h2, h3 {
-        color: #00FFCC !important;
-        font-family: 'Inter', sans-serif;
-        text-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+        background: linear-gradient(90deg, #00FFCC, #0099FF);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        letter-spacing: -1px;
     }
-    /* Stylish Buttons */
-    .stButton>button {
-        background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
-        color: white; border: none; border-radius: 30px;
-        padding: 10px 25px; transition: 0.3s;
-    }
-    .stButton>button:hover {
-        transform: scale(1.05); box-shadow: 0 0 15px rgba(0, 210, 255, 0.5);
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {
+        background-color: #060d16 !important;
+        border-right: 2px solid #00FFCC;
     }
     </style>
     """, unsafe_allow_html=True)
 
-apply_modern_style()
-
-# --- 2. Load Model ---
+# --- 2. Load AI Model ---
 @st.cache_resource
 def load_model():
+    # Using the base model for speed and memory efficiency
     return pipeline(model="google/owlv2-base-patch16", task="zero-shot-object-detection")
 
 detector = load_model()
 
 # --- 3. Sidebar UI ---
-st.sidebar.title("🛠️ Vision Controls")
-target_labels = st.sidebar.text_input("Look for:", "apple, orange, person, mobile phone")
-threshold = st.sidebar.slider("Sensitivity", 0.05, 1.0, 0.15)
+st.sidebar.title("⚡ AI CONFIG")
+target_labels = st.sidebar.text_area("TARGET OBJECTS (comma separated):", "apple, orange, pomegranate, mobile phone, person")
+threshold = st.sidebar.slider("AI SENSITIVITY", 0.05, 1.0, 0.20)
 labels = [l.strip() for l in target_labels.split(",") if l.strip()]
 
 # --- 4. Main View ---
-st.title("👁️ VisionPro AI Station")
-tab1, tab2 = st.tabs(["🎥 Live Stream", "📤 Upload File"])
+st.title("👁️ VisionPro: Live Object Intelligence")
+
+tab1, tab2 = st.tabs(["🛰️ LIVE SCANNER", "📸 STATIC ANALYSIS"])
 
 with tab1:
-    st.info("Hold an object up to the camera to see instant AI labeling.")
+    st.write("### Real-time Neural Detection")
     
-    class VideoProcessor:
-        def recv(self, frame):
-            img = frame.to_ndarray(format="bgr24")
-            # Image processing
-            pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            predictions = detector(pil_img, candidate_labels=labels, threshold=threshold)
-            
-            draw = ImageDraw.Draw(pil_img)
-            for pred in predictions:
-                box = pred["box"]
-                # Futuristic Cyan boxes
-                draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="#00FFCC", width=4)
-                draw.text((box["xmin"], box["ymin"]-20), f"{pred['label'].upper()}", fill="#00FFCC")
-            
-            return av.VideoFrame.from_ndarray(np.array(pil_img), format="rgb24")
+    # FIXED: The callback function is now outside the class for better compatibility
+    def video_frame_callback(frame):
+        img = frame.to_ndarray(format="bgr24")
+        
+        # 1. Convert BGR to RGB for AI
+        pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        
+        # 2. Run Inference
+        predictions = detector(pil_img, candidate_labels=labels, threshold=threshold)
+        
+        # 3. Draw Results
+        draw = ImageDraw.Draw(pil_img)
+        for pred in predictions:
+            box = pred["box"]
+            # Futuristic Neon Cyan Box
+            draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="#00FFCC", width=4)
+            # Label
+            draw.text((box["xmin"], box["ymin"]-20), f"{pred['label'].upper()}", fill="#00FFCC")
+        
+        # 4. Convert back to frame
+        return av.VideoFrame.from_ndarray(np.array(pil_img), format="rgb24")
 
     webrtc_streamer(
         key="vision-live",
-        video_frame_callback=VideoProcessor().recv,
+        video_frame_callback=video_frame_callback,
         rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
         media_stream_constraints={"video": True, "audio": False}
     )
 
 with tab2:
-    uploaded_file = st.file_uploader("Drop an image here", type=['jpg', 'png', 'webp'])
+    st.write("### High-Resolution Image Analysis")
+    uploaded_file = st.file_uploader("Drop image files here", type=['jpg', 'png', 'webp'])
     if uploaded_file:
         img = Image.open(uploaded_file).convert("RGB")
-        with st.spinner("AI Analysis in progress..."):
+        with st.spinner("Executing Deep Scan..."):
             results = detector(img, candidate_labels=labels, threshold=threshold)
             draw = ImageDraw.Draw(img)
             for res in results:
