@@ -194,11 +194,9 @@ if mode == "Webcam":
 
     st.subheader("Live Webcam Detection")
 
-    run = st.checkbox("Start Camera")
+    st.warning("⚠ Webcam detection works only on local machine.")
 
-    frame_window = st.image([])
-
-  st.warning("Webcam detection works only on local machine.")
+    st.info("Run this app locally to use webcam detection.")
 
     while run:
 
@@ -234,6 +232,7 @@ if history:
 
 else:
     st.info("No detections yet.")
+
 
 
 
