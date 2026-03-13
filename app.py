@@ -1,5 +1,4 @@
 import streamlit as st
-import cv2
 import numpy as np
 import json
 import time
@@ -171,7 +170,8 @@ if mode == "Image Upload":
 
             filename = f"detections/{datetime.now().timestamp()}.png"
 
-            cv2.imwrite(filename,result)
+          from PIL import Image
+          Image.fromarray(result).save(filename)
 
             save_history({
                 "time":str(datetime.now()),
@@ -232,6 +232,7 @@ if history:
 
 else:
     st.info("No detections yet.")
+
 
 
 
