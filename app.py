@@ -1,94 +1,235 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer
-import av
 import cv2
+import json
+import time
+import pandas as pd
+from ultralytics import YOLO
+from PIL import Image
 import numpy as np
-import torch
-from transformers import pipeline
-from PIL import Image, ImageDraw
+from datetime import datetime
+from pathlib import Path
 
-# --- 1. Futuristic UI Setup ---
-st.set_page_config(page_title="VisionPro AI", layout="wide")
+# -------------------------------
+# PAGE CONFIG
+# -------------------------------
 
-st.markdown("""
-    <style>
-    .stApp { background: #060d16; color: #e2e8f0; }
-    [data-testid="stVerticalBlock"] > div:has(div.element-container) {
-        background: rgba(16, 24, 40, 0.8);
-        backdrop-filter: blur(10px);
-        border: 1px solid #00FFCC;
-        border-radius: 15px; padding: 20px;
-    }
-    h1 { background: linear-gradient(90deg, #00FFCC, #0099FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    </style>
-    """, unsafe_allow_html=True)
+st.set_page_config(
+    page_title="AI Vision Detection",
+    page_icon="🤖",
+    layout="wide"
+)
 
-# --- 2. Load AI Model (FIXED FOR CPU) ---
+# -------------------------------
+# LOAD CSS
+# -------------------------------
+
+def load_css():
+    with open("static/style.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+load_css()
+
+# -------------------------------
+# HEADER
+# -------------------------------
+
+st.markdown(
+"""
+<div class="title">
+AI Vision Detection Platform
+</div>
+""",
+unsafe_allow_html=True
+)
+
+# -------------------------------
+# SIDEBAR SETTINGS
+# -------------------------------
+
+st.sidebar.title("Settings")
+
+model_choice = st.sidebar.selectbox(
+"Model",
+["yolov8n.pt","yolov8s.pt","yolov8m.pt"]
+)
+
+confidence = st.sidebar.slider(
+"Confidence Threshold",
+0.1,1.0,0.5
+)
+
+mode = st.sidebar.radio(
+"Detection Mode",
+["Image Upload","Webcam"]
+)
+
+# -------------------------------
+# LOAD MODEL
+# -------------------------------
+
 @st.cache_resource
-def load_model():
-    # We force torch_dtype to float32 to fix the 'Half' error on CPU servers
-    return pipeline(
-        model="google/owlv2-base-patch16", 
-        task="zero-shot-object-detection",
-        torch_dtype=torch.float32,
-        device="cpu"
+def load_model(name):
+    return YOLO(name)
+
+model = load_model(model_choice)
+
+# -------------------------------
+# HISTORY FUNCTIONS
+# -------------------------------
+
+history_file = "history.json"
+
+def save_history(data):
+
+    try:
+        with open(history_file,"r") as f:
+            history = json.load(f)
+    except:
+        history = []
+
+    history.append(data)
+
+    with open(history_file,"w") as f:
+        json.dump(history,f)
+
+def load_history():
+    try:
+        with open(history_file) as f:
+            return json.load(f)
+    except:
+        return []
+
+# -------------------------------
+# IMAGE DETECTION
+# -------------------------------
+
+def detect_image(image):
+
+    start = time.time()
+
+    results = model(image, conf=confidence)
+
+    annotated = results[0].plot()
+
+    end = time.time()
+
+    names = results[0].names
+
+    boxes = results[0].boxes
+
+    detected = []
+
+    if boxes is not None:
+        for c in boxes.cls:
+            detected.append(names[int(c)])
+
+    return annotated, detected, round(end-start,2)
+
+# -------------------------------
+# IMAGE UPLOAD MODE
+# -------------------------------
+
+if mode == "Image Upload":
+
+    st.subheader("Upload Image")
+
+    uploaded = st.file_uploader(
+        "Choose an image",
+        type=["jpg","png","jpeg"]
     )
 
-detector = load_model()
+    if uploaded:
 
-# --- 3. Sidebar ---
-st.sidebar.title("⚡ AI PANEL")
-target_labels = st.sidebar.text_input("Look for:", "apple, orange, person, laptop")
-threshold = st.sidebar.slider("Sensitivity", 0.05, 1.0, 0.20)
-labels = [l.strip() for l in target_labels.split(",") if l.strip()]
+        image = Image.open(uploaded)
 
-# Session state to store session history
-if 'history' not in st.session_state:
-    st.session_state.history = []
+        st.image(image, caption="Original Image")
 
-# --- 4. Main App ---
-st.title("👁️ VisionPro: Neural Scanner")
-t1, t2 = st.tabs(["🎥 LIVE SCAN", "📸 UPLOAD"])
+        if st.button("Run Detection"):
 
-def process_frame(frame):
-    img = frame.to_ndarray(format="bgr24")
-    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    
-    # Inference
-    predictions = detector(pil_img, candidate_labels=labels, threshold=threshold)
-    
-    draw = ImageDraw.Draw(pil_img)
-    for pred in predictions:
-        box = pred["box"]
-        draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="#00FFCC", width=4)
-        draw.text((box["xmin"], box["ymin"]-20), f"{pred['label'].upper()}", fill="#00FFCC")
-        # Save to history
-        if pred['label'] not in st.session_state.history:
-            st.session_state.history.append(pred['label'])
-            
-    return av.VideoFrame.from_ndarray(np.array(pil_img), format="rgb24")
+            with st.spinner("AI analyzing image..."):
 
-with t1:
-    webrtc_streamer(
-        key="live",
-        video_frame_callback=process_frame,
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        media_stream_constraints={"video": True, "audio": False}
-    )
+                result, objects, runtime = detect_image(image)
 
-with t2:
-    up = st.file_uploader("Upload Image")
-    if up:
-        img = Image.open(up).convert("RGB")
-        res = detector(img, candidate_labels=labels, threshold=threshold)
-        draw = ImageDraw.Draw(img)
-        for r in res:
-            box = r["box"]
-            draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="#00FFCC", width=5)
-        st.image(img)
+            st.image(result, caption="Detection Result")
 
-# --- 5. Session Report ---
-st.sidebar.markdown("---")
-if st.sidebar.button("Generate Session Report"):
-    report = " \n".join(st.session_state.history)
-    st.sidebar.download_button("Download Report", report, file_name="vision_report.txt")
+            # stats
+
+            st.subheader("Detection Statistics")
+
+            col1,col2,col3 = st.columns(3)
+
+            col1.metric("Objects Detected",len(objects))
+
+            most_common = max(set(objects), key=objects.count) if objects else "None"
+
+            col2.metric("Most Common",most_common)
+
+            col3.metric("Processing Time",f"{runtime}s")
+
+            # save image
+
+            filename = f"detections/{datetime.now().timestamp()}.png"
+
+            cv2.imwrite(filename,result)
+
+            save_history({
+                "time":str(datetime.now()),
+                "objects":objects,
+                "file":filename
+            })
+
+            with open(filename,"rb") as f:
+                st.download_button(
+                    "Download Result",
+                    f,
+                    "detection.png"
+                )
+
+# -------------------------------
+# WEBCAM MODE
+# -------------------------------
+
+if mode == "Webcam":
+
+    st.subheader("Live Webcam Detection")
+
+    run = st.checkbox("Start Camera")
+
+    frame_window = st.image([])
+
+    camera = cv2.VideoCapture(0)
+
+    while run:
+
+        ret, frame = camera.read()
+
+        if not ret:
+            st.error("Camera error")
+            break
+
+        results = model(frame, conf=confidence)
+
+        annotated = results[0].plot()
+
+        frame_window.image(annotated)
+
+    camera.release()
+
+# -------------------------------
+# HISTORY SECTION
+# -------------------------------
+
+st.divider()
+
+st.subheader("Detection History")
+
+history = load_history()
+
+if history:
+
+    df = pd.DataFrame(history)
+
+    st.dataframe(df)
+
+else:
+    st.info("No detections yet.")
