@@ -1,17 +1,16 @@
 import streamlit as st
-import numpy as np
 import json
 import time
 import pandas as pd
+import numpy as np
 from ultralytics import YOLO
 from PIL import Image
-import numpy as np
 from datetime import datetime
 from pathlib import Path
 
-# -------------------------------
+# ----------------------------
 # PAGE CONFIG
-# -------------------------------
+# ----------------------------
 
 st.set_page_config(
     page_title="AI Vision Detection",
@@ -19,91 +18,84 @@ st.set_page_config(
     layout="wide"
 )
 
-# -------------------------------
-# LOAD CSS
-# -------------------------------
-
-def load_css():
-    with open("style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-load_css()
-
-# -------------------------------
-# HEADER
-# -------------------------------
+# ----------------------------
+# TITLE
+# ----------------------------
 
 st.markdown(
 """
-<div class="title">
-AI Vision Detection Platform
-</div>
-""",
-unsafe_allow_html=True
+# 🤖 AI Vision Detection Platform
+Upload an image and detect objects using YOLOv8 AI
+"""
 )
 
-# -------------------------------
+# ----------------------------
 # SIDEBAR SETTINGS
-# -------------------------------
+# ----------------------------
 
-st.sidebar.title("Settings")
+st.sidebar.title("⚙ Settings")
 
 model_choice = st.sidebar.selectbox(
-"Model",
-["yolov8n.pt","yolov8s.pt","yolov8m.pt"]
+    "Select Model",
+    ["yolov8n.pt", "yolov8s.pt"]
 )
 
 confidence = st.sidebar.slider(
-"Confidence Threshold",
-0.1,1.0,0.5
+    "Confidence Threshold",
+    0.1,
+    1.0,
+    0.5
 )
 
-mode = st.sidebar.radio(
-"Detection Mode",
-["Image Upload","Webcam"]
-)
-
-# -------------------------------
+# ----------------------------
 # LOAD MODEL
-# -------------------------------
+# ----------------------------
 
 @st.cache_resource
 def load_model(name):
-    return YOLO(name)
+    model = YOLO(name)
+    return model
 
 model = load_model(model_choice)
 
-# -------------------------------
-# HISTORY FUNCTIONS
-# -------------------------------
+# ----------------------------
+# CREATE FOLDERS
+# ----------------------------
+
+Path("detections").mkdir(exist_ok=True)
 
 history_file = "history.json"
 
-def save_history(data):
-
-    try:
-        with open(history_file,"r") as f:
-            history = json.load(f)
-    except:
-        history = []
-
-    history.append(data)
-
-    with open(history_file,"w") as f:
-        json.dump(history,f)
+# ----------------------------
+# HISTORY FUNCTIONS
+# ----------------------------
 
 def load_history():
+
     try:
-        with open(history_file) as f:
-            return json.load(f)
+        with open(history_file, "r") as f:
+            data = json.load(f)
     except:
-        return []
+        data = []
 
-# -------------------------------
-# IMAGE DETECTION
-# -------------------------------
+    return data
 
-def detect_image(image):
+
+def save_history(record):
+
+    history = load_history()
+
+    history.append(record)
+
+    with open(history_file, "w") as f:
+        json.dump(history, f)
+
+
+# ----------------------------
+# DETECTION FUNCTION
+# ----------------------------
+
+def detect_objects(image):
 
     start = time.time()
 
@@ -113,6 +105,8 @@ def detect_image(image):
 
     end = time.time()
 
+    runtime = round(end - start, 2)
+
     names = results[0].names
 
     boxes = results[0].boxes
@@ -120,107 +114,91 @@ def detect_image(image):
     detected = []
 
     if boxes is not None:
+
         for c in boxes.cls:
             detected.append(names[int(c)])
 
-    return annotated, detected, round(end-start,2)
+    return annotated, detected, runtime
 
-# -------------------------------
-# IMAGE UPLOAD MODE
-# -------------------------------
 
-if mode == "Image Upload":
+# ----------------------------
+# IMAGE UPLOAD
+# ----------------------------
 
-    st.subheader("Upload Image")
+st.subheader("📤 Upload Image")
 
-    uploaded = st.file_uploader(
-        "Choose an image",
-        type=["jpg","png","jpeg"]
-    )
+uploaded = st.file_uploader(
+    "Upload image for AI detection",
+    type=["jpg", "jpeg", "png"]
+)
 
-    if uploaded:
+if uploaded:
 
-        image = Image.open(uploaded)
+    image = Image.open(uploaded)
 
-        st.image(image, caption="Original Image")
+    st.image(image, caption="Original Image", use_column_width=True)
 
-        if st.button("Run Detection"):
+    if st.button("🚀 Run Detection"):
 
-            with st.spinner("AI analyzing image..."):
+        with st.spinner("AI analyzing image..."):
 
-                result, objects, runtime = detect_image(image)
+            result, objects, runtime = detect_objects(image)
 
-            st.image(result, caption="Detection Result")
+        st.image(result, caption="Detection Result", use_column_width=True)
 
-            # stats
+        # ----------------------------
+        # STATISTICS
+        # ----------------------------
 
-            st.subheader("Detection Statistics")
+        st.subheader("📊 Detection Statistics")
 
-            col1,col2,col3 = st.columns(3)
+        col1, col2, col3 = st.columns(3)
 
-            col1.metric("Objects Detected",len(objects))
+        col1.metric("Objects Detected", len(objects))
 
-            most_common = max(set(objects), key=objects.count) if objects else "None"
+        if objects:
+            most_common = max(set(objects), key=objects.count)
+        else:
+            most_common = "None"
 
-            col2.metric("Most Common",most_common)
+        col2.metric("Most Common", most_common)
 
-            col3.metric("Processing Time",f"{runtime}s")
+        col3.metric("Processing Time", f"{runtime}s")
 
-            # save image
+        # ----------------------------
+        # SAVE RESULT
+        # ----------------------------
 
-            filename = f"detections/{datetime.now().timestamp()}.png"
+        filename = f"detections/{datetime.now().timestamp()}.png"
 
-          from PIL import Image
-          Image.fromarray(result).save(filename)
+        Image.fromarray(result).save(filename)
 
-            save_history({
-                "time":str(datetime.now()),
-                "objects":objects,
-                "file":filename
-            })
+        save_history({
+            "time": str(datetime.now()),
+            "objects": objects,
+            "file": filename
+        })
 
-            with open(filename,"rb") as f:
-                st.download_button(
-                    "Download Result",
-                    f,
-                    "detection.png"
-                )
+        # ----------------------------
+        # DOWNLOAD BUTTON
+        # ----------------------------
 
-# -------------------------------
-# WEBCAM MODE
-# -------------------------------
+        with open(filename, "rb") as f:
 
-if mode == "Webcam":
+            st.download_button(
+                "⬇ Download Result",
+                f,
+                file_name="detection.png"
+            )
 
-    st.subheader("Live Webcam Detection")
 
-    st.warning("⚠ Webcam detection works only on local machine.")
-
-    st.info("Run this app locally to use webcam detection.")
-
-    while run:
-
-        ret, frame = camera.read()
-
-        if not ret:
-            st.error("Camera error")
-            break
-
-        results = model(frame, conf=confidence)
-
-        annotated = results[0].plot()
-
-        frame_window.image(annotated)
-
-    camera.release()
-
-# -------------------------------
+# ----------------------------
 # HISTORY SECTION
-# -------------------------------
+# ----------------------------
 
 st.divider()
 
-st.subheader("Detection History")
+st.subheader("🕘 Detection History")
 
 history = load_history()
 
@@ -231,9 +209,5 @@ if history:
     st.dataframe(df)
 
 else:
-    st.info("No detections yet.")
 
-
-
-
-
+    st.info("No detection history yet.")
