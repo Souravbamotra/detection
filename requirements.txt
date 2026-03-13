@@ -1,5 +1,6 @@
 streamlit
 streamlit-webrtc
+opencv-python-headless
 transformers
 torch
 torchvision
