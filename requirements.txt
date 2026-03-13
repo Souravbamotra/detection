@@ -1,10 +1,5 @@
 streamlit
-streamlit-webrtc
-opencv-python-headless
-transformers
-torch
-torchvision
+ultralytics
+opencv-python
 pillow
-timm
-av
-numpy
+pandas
