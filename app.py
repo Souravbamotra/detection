@@ -198,7 +198,7 @@ if mode == "Webcam":
 
     frame_window = st.image([])
 
-    camera = cv2.VideoCapture(0)
+  st.warning("Webcam detection works only on local machine.")
 
     while run:
 
@@ -234,5 +234,6 @@ if history:
 
 else:
     st.info("No detections yet.")
+
 
 
