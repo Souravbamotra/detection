@@ -1,8 +1,9 @@
 streamlit
+streamlit-webrtc
 transformers
 torch
 torchvision
 pillow
 timm
-streamlit-webrtc
 av
+numpy
