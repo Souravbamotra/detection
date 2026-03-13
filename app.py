@@ -1,8 +1,9 @@
 import streamlit as st
-import json
-import time
 import pandas as pd
 import numpy as np
+import json
+import time
+
 from ultralytics import YOLO
 from PIL import Image
 from datetime import datetime
@@ -211,3 +212,4 @@ if history:
 else:
 
     st.info("No detection history yet.")
+
