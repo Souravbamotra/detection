@@ -1,49 +1,77 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoHTMLAttributes
+import av
 from transformers import pipeline
 from PIL import Image, ImageDraw
 
-# --- App Config ---
-st.set_page_config(page_title="Universal Object Finder", layout="wide")
+# --- Modern UI Configuration ---
+st.set_page_config(page_title="VisionPro AI", page_icon="👁️", layout="wide")
 
+st.markdown("""
+    <style>
+    .stApp { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); color: white; }
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
+    .stTabs [data-baseweb="tab"] { 
+        background-color: rgba(255, 255, 255, 0.05); 
+        border-radius: 10px 10px 0 0; 
+        padding: 10px 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- Load the AI Model ---
 @st.cache_resource
-def load_owl():
-    # OWLv2 is designed for 'Open Vocabulary' (detecting everything)
+def load_model():
     return pipeline(model="google/owlv2-base-patch16", task="zero-shot-object-detection")
 
-detector = load_owl()
+detector = load_model()
 
-# --- Sidebar: Choose your World ---
-st.sidebar.title("🌍 Detection Universe")
-mode = st.sidebar.selectbox("What are we looking for?", 
-    ["Everything (Infinite)", "Fruits & Food", "Vehicles & Transport", "Tools & Hardware"])
+# --- Sidebar Controls ---
+st.sidebar.title("🛠️ Settings")
+target_labels = st.sidebar.text_input("Objects to detect (comma separated):", "apple, orange, person")
+threshold = st.sidebar.slider("Sensitivity", 0.05, 1.0, 0.20)
+labels = [l.strip() for l in target_labels.split(",")]
 
-# Define the 'Vocabulary' based on the mode
-vocab_map = {
-    "Everything (Infinite)": "object, thing, item", # Very broad
-    "Fruits & Food": "apple, banana, orange, pomegranate, bread, milk",
-    "Vehicles & Transport": "car, ship, airplane, bicycle, truck, boat",
-    "Tools & Hardware": "hammer, screwdriver, wrench, nail, drill, saw"
-}
+# --- Main App Interface ---
+st.title("👁️ VisionPro AI")
+tab1, tab2 = st.tabs(["🚀 Live Camera", "📸 Image Upload"])
 
-# Allow the user to edit the list manually too
-search_query = st.sidebar.text_area("Specific labels (comma separated):", value=vocab_map[mode])
-threshold = st.sidebar.slider("Sensitivity", 0.05, 1.0, 0.15)
-
-# --- Logic ---
-uploaded_file = st.file_uploader("Upload Image", type=['jpg', 'png', 'webp'])
-
-if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB")
-    labels = [l.strip() for l in search_query.split(",")]
+# --- TAB 1: Real-Time Detection ---
+with tab1:
+    st.subheader("Live Feed")
     
-    with st.spinner(f"Scanning for {labels}..."):
-        results = detector(img, candidate_labels=labels, threshold=threshold)
-        
-        draw = ImageDraw.Draw(img)
-        for res in results:
-            box = res["box"]
-            label = res["label"]
-            draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="cyan", width=3)
-            draw.text((box["xmin"], box["ymin"] - 10), label, fill="cyan")
+    class VideoProcessor:
+        def recv(self, frame):
+            img = frame.to_ndarray(format="bgr24")
+            # Convert to RGB for the AI
+            pil_img = Image.fromarray(img)
+            predictions = detector(pil_img, candidate_labels=labels, threshold=threshold)
+            
+            # Draw on the frame
+            draw = ImageDraw.Draw(pil_img)
+            for pred in predictions:
+                box = pred["box"]
+                draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="cyan", width=4)
+                draw.text((box["xmin"], box["ymin"]-15), f"{pred['label']}", fill="cyan")
+            
+            return av.VideoFrame.from_ndarray(np.array(pil_img), format="rgb24")
 
-    st.image(img, use_container_width=True)
+    webrtc_streamer(
+        key="vision-pro",
+        video_frame_callback=VideoProcessor().recv,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        media_stream_constraints={"video": True, "audio": False}
+    )
+
+# --- TAB 2: Image Upload (Original Mode) ---
+with tab2:
+    uploaded_file = st.file_uploader("Upload a photo...", type=['jpg', 'png', 'webp'])
+    if uploaded_file:
+        img = Image.open(uploaded_file).convert("RGB")
+        with st.spinner("Analyzing..."):
+            results = detector(img, candidate_labels=labels, threshold=threshold)
+            draw = ImageDraw.Draw(img)
+            for res in results:
+                box = res["box"]
+                draw.rectangle((box["xmin"], box["ymin"], box["xmax"], box["ymax"]), outline="#00FFCC", width=5)
+        st.image(img, use_container_width=True)
