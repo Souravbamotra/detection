@@ -1,5 +1,6 @@
 import streamlit as st
 import cv2
+import numpy as np
 import json
 import time
 import pandas as pd
@@ -233,4 +234,5 @@ if history:
 
 else:
     st.info("No detections yet.")
+
 
